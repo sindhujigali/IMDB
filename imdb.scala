@@ -1,63 +1,61 @@
-import org.apache.spark.sql.SparkSession
 
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql
 object imdb {
 
-  val RANK = 0
-  val TITLE = 1
-  val GENRE = 2
-  val DESCRIPTION = 3
-  val DIRECTOR = 4
-  val ACTORS = 5
-  val YEAR = 6
-  val RUNTIME = 7
-  val RATING = 8
-  val VOTES = 9
-  val REVENUE = 10
-  val METASCORE = 11
-
-
   def main(args: Array[String]): Unit = {
+    val sparkSession = SparkSession.builder().appName("IMDB_dataframes").master("local").getOrCreate()
+    val sc=sparkSession.sparkContext
+    val rdd=sc.textFile("F:\\sindhu\\datasets\\imdb\\sample.txt")
+     import sparkSession.implicits._
+    /*rdd.map(line=>line.split("\t")(4)).foreach(println)*/
 
 
-    val sparkSession = SparkSession.builder().appName("IMDB").master("local").getOrCreate()
-    val sc = sparkSession.sparkContext
+    val imdb=rdd.map(_.split("\t")).map(row=>
+    try{
+      IMDB1(
+        row(0).trim.toInt,
+        row(1),
+        row(2),
+        row(3),
+        row(4),
+        row(5),
+        row(6).trim.toInt,
+        row(7).trim.toInt,
+        row(8).trim.toDouble,
+        row(9).trim.toLong,
+        row(10).trim.toDouble,
+        row(11).toInt
 
-    val rdd = sc.textFile("F:\\sindhu\\datasets\\imdb\\sample.txt")
-    rdd.map(line => (line.split("\t")(6), line)).
-      groupByKey().
-      map(getmovie => (getmovie._1, getMovieName(getmovie._2.toArray))).
-      foreach(println)
+      )}
+
+    catch{
+      case exp@(_:ArrayIndexOutOfBoundsException|_:NumberFormatException)=>
+        IMDB1(
+          -9999,
+          " ",
+          " ",
+          " ",
+          " ",
+          " ",
+          -9999,
+          -9999,
+          -9999,
+          -9999,
+          -9999,
+          -9999
+        )
+    }
+    ).filter(imdbdata=>imdbdata.rank!= -9999).toDF
+
+    import sql.functions._
+
+    val newDF=imdb
+    newDF.createOrReplaceTempView("IMDB_TABLE")
+    sparkSession.sql("Select year,rating,title from IMDB_TABLE where votes>50000").groupBy("year").max("rating").show()
+
   }
 
-  def getMovieName(listofMovies: Array[String]): String = {
-    var max_rating = 0.0
-    var max_votes = 0
-    var best_movie=" "
-
-    listofMovies.foreach(line => {
-      try {
-
-        val rating = line.split("\t")(8)
-        val votes = line.split("\t")(9)
-        var movie=line.split("\t")(1)
-
-        if (max_rating < rating.toFloat) {
-          max_rating = rating.toFloat
-           best_movie=movie
-        }
-        else if (max_rating == rating.toFloat) {
-          if (max_votes < votes.toInt)
-            max_votes = votes.toInt
-             best_movie=movie
-
-        }
-      } catch {
-        case e: NumberFormatException =>
-          println("...")
-
-      }
-
-    })
- best_movie
-  }
 }
+case class IMDB1(rank:Int,title:String,genre:String,description:String,director:String,actors:String,year:Int,runtime:Double,
+                rating:Double,votes:Long,revenue:Double,metascore:Double)
